@@ -31,6 +31,9 @@ pnpm test:ui          # Run tests with coverage UI
 
 # All quality checks at once
 pnpm check:turbo      # Run biome:check, type:check, and test
+
+# Installation
+pnpm i               # Install dependencies (requires Node.js >=22.16.x)
 ```
 
 ## Architecture & Code Organization
@@ -75,11 +78,13 @@ The main application logic is in `src/lib/pages/book-distiller/index.tsx` and im
 
 ### Code Quality Rules
 
-- **No default exports** except for page components and config files
-- **Unused imports/variables** are errors
+- **No default exports** except for page components (`src/lib/pages/*/index.tsx`) and config files
+- **Unused imports/variables** are errors (enforced by Biome)
 - **Console statements** limited to `console.error()` and `console.info()`
 - **Accessibility** rules enforced (semantic elements required)
 - **Type safety** strictly enforced with verbatimModuleSyntax
+- **File naming**: kebab-case enforced by Biome (except TanStack Router files)
+- **Import organization**: Automatic grouping (Node/package imports, aliases, relative paths)
 
 ### Adding shadcn/ui Components
 
@@ -106,7 +111,7 @@ When modifying the BookDistiller component:
 
 - Tests use Vitest with jsdom environment
 - Testing Library React for component testing
-- Run `pnpm test:ui` for interactive test debugging
+- Run `pnpm test:ui` for interactive test debugging with coverage UI
 - Coverage reports available via `pnpm test:coverage`
 
 ### PWA Configuration

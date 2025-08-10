@@ -471,16 +471,54 @@ export default function BookDistiller() {
 
       const id = crypto.randomUUID();
       const order = sections.length + 1;
+      const isFirstSection = sections.length === 0;
+      
+      // Auto-accept sections when auto-advance is enabled and it's not the first section
+      const sectionStatus = (autoAdvance && !isFirstSection) ? 'accepted' as const : 'draft' as const;
+      
       const section = {
         id,
         bookId,
         content: text.trim(),
         heading: parseHeading(text),
-        status: 'draft' as const,
+        status: sectionStatus,
         order,
       };
       setSections((prev) => [...prev, section]);
       await db.sections.put(section);
+
+      // If auto-advance is enabled and this is not the first section, continue generating
+      if (autoAdvance && !isFirstSection && !shouldStop) {
+        // Check if we should continue (no stop token and under max sections)
+        const hasStopToken = text.trim().includes(stopToken);
+        
+        // Get current accepted count from database (more reliable than state)
+        setTimeout(async () => {
+          if (shouldStop) return;
+          
+          const currentSections = await db.sections
+            .where({ bookId })
+            .sortBy('order');
+          const acceptedCount = currentSections.filter(s => s.status === 'accepted').length;
+          
+          console.info('Auto-advance check:', {
+            hasStopToken,
+            acceptedCount,
+            maxSections,
+            shouldContinue: !hasStopToken && acceptedCount < maxSections
+          });
+          
+          if (!hasStopToken && acceptedCount < maxSections) {
+            console.info('Auto-advancing to next section...');
+            generateNext();
+          } else {
+            console.info('Auto-advance stopped:', {
+              hasStopToken,
+              reachedMax: acceptedCount >= maxSections
+            });
+          }
+        }, 500);
+      }
     } catch (e: any) {
       alert(e?.message || String(e));
     } finally {
@@ -493,7 +531,7 @@ export default function BookDistiller() {
   async function accept(id: string) {
     updateSectionLocal({ id, status: 'accepted' });
 
-    // Check if this acceptance should trigger auto-advance
+    // Check if this acceptance should trigger auto-advance (for first section)
     if (autoAdvance && !isBusy && !shouldStop) {
       // Small delay to let state update
       setTimeout(async () => {
@@ -740,7 +778,7 @@ export default function BookDistiller() {
                         </Badge>
                       </div>
                       <Textarea
-                        className="mt-2 h-40 resize-none overflow-hidden"
+                        className="mt-2 h-40 resize-none overflow-auto"
                         value={s.content}
                         onChange={(e) => edit(s.id, e.target.value)}
                       />
