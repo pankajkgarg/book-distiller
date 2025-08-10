@@ -428,7 +428,7 @@ export default function BookDistiller() {
     db.sections.update(upd.id, upd);
   }
 
-  async function generateNext() {
+  async function generateNext(acceptedOverride?: typeof accepted) {
     if (!bookId) {
       alert('Upload a book first');
       return;
@@ -444,7 +444,9 @@ export default function BookDistiller() {
     }
     setIsBusy(true);
     try {
-      const history = accepted.map((s) => s.content).join('\n\n');
+      const history = (acceptedOverride ?? accepted)
+        .map((s) => s.content)
+        .join('\n\n');
       const system = prompt;
       const user = `Book Title: ${title || '(unknown)'}\nAuthor: ${author || '(unknown)'}\n\nFull book text (or extract):\n${bookText.slice(0, 100000)}\n\nPreviously accepted sections (for continuity):\n${history}\n\nGenerate the next section according to the protocol above. Then end if appropriate with the stop token: ${stopToken}`;
 
@@ -499,13 +501,16 @@ export default function BookDistiller() {
         const currentSections = await db.sections
           .where({ bookId })
           .sortBy('order');
-        const acceptedCount = currentSections.filter(
-          (s) => s.status === 'accepted',
-        ).length;
+        const acceptedSections = currentSections
+          .filter((s) => s.status === 'accepted')
+          .sort((a, b) => a.order - b.order);
+        const acceptedCount = acceptedSections.length;
         const lastSection = currentSections[currentSections.length - 1];
 
-        console.info(`Auto-advance check: accepted=${acceptedCount}, max=${maxSections}, autoAdvance=${autoAdvance}`);
-        
+        console.info(
+          `Auto-advance check: accepted=${acceptedCount}, max=${maxSections}, autoAdvance=${autoAdvance}`,
+        );
+
         // Only auto-advance if we haven't reached max sections and the last section doesn't contain the stop token
         if (
           lastSection &&
@@ -513,11 +518,11 @@ export default function BookDistiller() {
           acceptedCount < maxSections
         ) {
           console.info('Auto-advancing to next section...');
-          await generateNext();
+          await generateNext(acceptedSections);
         } else {
           console.info('Auto-advance stopped:', {
             hasStopToken: lastSection?.content.includes(stopToken),
-            reachedMax: acceptedCount >= maxSections
+            reachedMax: acceptedCount >= maxSections,
           });
         }
       }, 200);
@@ -664,7 +669,7 @@ export default function BookDistiller() {
                 <Button
                   variant="default"
                   className="flex-1 border"
-                  onClick={generateNext}
+                  onClick={() => generateNext()}
                   disabled={isBusy}
                 >
                   {isBusy
