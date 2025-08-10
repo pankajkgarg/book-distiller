@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
 // @ts-ignore
@@ -508,17 +507,18 @@ export default function BookDistiller() {
             shouldContinue: !hasStopToken && acceptedCount < maxSections
           });
           
-          if (!hasStopToken && acceptedCount < maxSections) {
-            console.info('Auto-advancing to next section...');
-            generateNext();
-          } else {
-            console.info('Auto-advance stopped:', {
-              hasStopToken,
-              reachedMax: acceptedCount >= maxSections
-            });
-          }
-        }, 500);
-      }
+            if (!hasStopToken && acceptedCount < maxSections) {
+              console.info('Auto-advancing to next section...');
+              generateNext();
+            } else {
+              console.info('Auto-advance stopped:', {
+                hasStopToken,
+                reachedMax: acceptedCount >= maxSections
+              });
+              setAutoAdvance(false);
+            }
+          }, 500);
+        }
     } catch (e: any) {
       alert(e?.message || String(e));
     } finally {
@@ -567,6 +567,7 @@ export default function BookDistiller() {
             hasStopToken: lastSection?.content.includes(stopToken),
             reachedMax: acceptedCount >= maxSections,
           });
+          setAutoAdvance(false);
         }
       }, 200);
     }
@@ -681,68 +682,6 @@ export default function BookDistiller() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Generation</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={autoAdvance}
-                    onCheckedChange={setAutoAdvance}
-                  />
-                  <Label>Auto‑advance</Label>
-                </div>
-                <Input
-                  className="w-20"
-                  type="number"
-                  value={maxSections}
-                  onChange={(e) =>
-                    setMaxSections(parseInt(e.target.value || '1'))
-                  }
-                />
-              </div>
-              <Input
-                placeholder="Stop token"
-                value={stopToken}
-                onChange={(e) => setStopToken(e.target.value)}
-              />
-              <div className="flex gap-2">
-                <Button
-                  variant="default"
-                  className="flex-1 border"
-                  onClick={() => generateNext()}
-                  disabled={isBusy}
-                >
-                  {isBusy
-                    ? 'Generating...'
-                    : sections.length
-                      ? 'Next'
-                      : 'Start'}
-                </Button>
-                <Button variant="outline" className="flex-1" onClick={undoLast}>
-                  Undo last
-                </Button>
-              </div>
-              {(isBusy || autoAdvance) && (
-                <Button 
-                  variant="destructive" 
-                  className="w-full" 
-                  onClick={() => setShouldStop(true)}
-                  disabled={!isBusy && !autoAdvance}
-                >
-                  Stop Process
-                </Button>
-              )}
-              <Button variant="outline" className="w-full" onClick={clearRun}>
-                Clear run
-              </Button>
-              <div className="text-xs text-muted-foreground">
-                Accepted: {accepted.length} • Total: {sections.length}
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         <div className="col-span-12 lg:col-span-5">
@@ -795,6 +734,71 @@ export default function BookDistiller() {
                 </div>
               </ScrollArea>
             </CardContent>
+            <CardFooter className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="default"
+                  onClick={() => {
+                    setAutoAdvance(false);
+                    generateNext();
+                  }}
+                  disabled={isBusy}
+                >
+                  {isBusy
+                    ? 'Generating...'
+                    : sections.length
+                      ? 'Next'
+                      : 'Start'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setAutoAdvance(true);
+                    generateNext();
+                  }}
+                  disabled={isBusy}
+                >
+                  Auto advance
+                </Button>
+                <Input
+                  className="w-20"
+                  type="number"
+                  value={maxSections}
+                  onChange={(e) =>
+                    setMaxSections(parseInt(e.target.value || '1'))
+                  }
+                />
+              </div>
+              <Input
+                placeholder="Stop token"
+                value={stopToken}
+                onChange={(e) => setStopToken(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={undoLast}>
+                  Undo last
+                </Button>
+                {(isBusy || autoAdvance) && (
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={() => {
+                      setShouldStop(true);
+                      setAutoAdvance(false);
+                    }}
+                    disabled={!isBusy && !autoAdvance}
+                  >
+                    Stop Process
+                  </Button>
+                )}
+                <Button variant="outline" className="flex-1" onClick={clearRun}>
+                  Clear run
+                </Button>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Accepted: {accepted.length} • Total: {sections.length}
+              </div>
+            </CardFooter>
           </Card>
         </div>
 
