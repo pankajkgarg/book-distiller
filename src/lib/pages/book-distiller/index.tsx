@@ -1,44 +1,11 @@
-// BOOK DISTILLER — CLIENT‑ONLY (Vite + shadcn/ui + IndexedDB)
-// -----------------------------------------------------------------------------
-// • 100% client-side. No Next.js, no server routes.
-// • Large-file friendly via IndexedDB (Dexie) — stores the uploaded file blob,
-//   extracted text, sections, and stitched draft.
-// • PDF extraction: pdfjs-dist with a local Web Worker (no CDN fetch).
-// • EPUB extraction: JSZip + OPF spine parsing + DOMParser (client-only).
-// • UI: shadcn/ui components (Button, Card, Input, Textarea, Select, Badge, etc.).
-// • LLM calls: direct fetch to providers (OpenAI/Anthropic/Gemini). You paste your
-//   API key (stored locally). NOTE: Browser keys are exposed to the page.
-//   Prefer temporary/restricted keys or run behind a local proxy if concerned.
-//
-// QUICK START (Terminal):
-//   pnpm create vite book-distiller --template react-ts
-//   cd book-distiller
-//   pnpm add dexie jszip pdfjs-dist zod
-//   pnpm add -D tailwindcss postcss autoprefixer
-//   npx tailwindcss init -p
-//   # Configure Tailwind (content: ./index.html, ./src/**/*.{ts,tsx}) and add base styles.
-//   # Install shadcn/ui (works in Vite):
-//   pnpm dlx shadcn@latest init
-//   pnpm dlx shadcn@latest add button card input textarea select badge scroll-area separator switch label tabs label
-//   # Add Radix peer deps if prompted.
-//   # In vite.config, ensure jsx: 'react-jsx' (default) and add types for .mjs workers if needed.
-//
-// Put this file at: src/App.tsx
-// Update src/main.tsx to render <App /> and Tailwind styles.
-
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { z } from "zod";
-import Dexie, { Table } from "dexie";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Dexie, { type Table } from "dexie";
 import JSZip from "jszip";
-// pdf.js (worker via Vite's ?worker loader)
 // @ts-ignore - Vite will provide a Worker constructor
 import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
 // @ts-ignore
 import * as pdfjsLib from "pdfjs-dist";
-// @ts-ignore
-import { GlobalWorkerOptions } from "pdfjs-dist/build/pdf";
 
-// shadcn/ui components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,44 +17,27 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-// Attach the worker without hitting a CDN
-// Prefer workerPort for ESM builds
 // @ts-ignore
 pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
-// Fallback (older pdfjs setups):
-// GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
 
-// ---------------------------------- Constants
 const DEFAULT_STOP_TOKEN = "<end_of_book>";
 
 const DEFAULT_PROMPT = `Your Mission:
 Your mission is to act as an immersive guide to a book I provide. You will embody the author/narrator's voice and generate a series of modular, in-depth sections exploring the book's core themes. The final goal is for me to be able to combine all of your responses into a single, cohesive, and seamlessly flowing document that feels like a standalone analysis written by the author.
 You are not a summarizer; you are a deep-dive analyst and storyteller. Depth, detail, and the generous use of memorable excerpts are far more important than conciseness.
 
-The Structure of Each Response
-For every section you generate, you must follow this internal structure without using explicit labels like "Introduction" or "Conclusion":
-
-SECTION HEADING: Start with a strong, thematic heading, like a chapter title.
-
-Introductory Narrative: In the author's voice, write an introduction that sets the stage for the theme. For the first response, this will introduce the book's core premise. For all subsequent responses, it must serve as a transition from the previous section's ideas.
-
-Excerpts: Present 2-4 (or more) substantial, direct excerpts (whole pages if needed) from the book that are vivid and memorable illustrations of the theme. Use markdown blockquotes. Prioritize stories, powerful dialogues, or "gut-punch" insights and important or memorable learnings.
-
-Your Reflections In the author's voice, weave in your reflections with paragraphs between the excerpts as needed  that synthesizes the excerpts and distills the core lesson or takeaway., use subheadings as needed. Try to make sure that each reflection is backed by as many relevant and useful excerpts as possible. Don't try to cheap out on the useful memorable excerpts from the book in the response. The conciseness of the response is not an objective.
-
-Transitional Bridge: You can also write a final paragraph (if neeeded) that creates a smooth, logical transition to the next theme the book will explore, ensuring the text can flow continuously when all responses are combined.
-
 Our Interaction Protocol:
 To begin, I will provide you with the Book Title and Author.
 You will generate the first section based on the book's most foundational theme.
 For every subsequent part, I will simply reply with the word: "Next".
-When you receive "Next", you must autonomously determine the next logical theme based on the book's narrative arc. You will then generate the next complete section according to the structure above, ensuring your introductory paragraph creates a perfect transition from the section you just wrote.`;
+When you receive "Next", you must autonomously determine the next logical theme based on the book's narrative arc. You will then generate the next complete section according to the structure above, ensuring your introductory paragraph creates a perfect transition from the section you just wrote.
+When all sections have been generated, only output "<end_of_book>" as your response to signal that whole book has been processed.  `;
 
-// ---------------------------------- Dexie DB
 class BDDatabase extends Dexie {
   books!: Table<{ id: string; name: string; blob?: Blob; text?: string; title?: string; author?: string; createdAt: number }>; 
   sections!: Table<{ id: string; bookId: string; content: string; heading: string; status: "draft" | "accepted" | "discarded"; order: number }>; 
   settings!: Table<{ key: string; value: any }>; 
+  
   constructor() {
     super("book_distiller_db");
     this.version(1).stores({
@@ -97,9 +47,9 @@ class BDDatabase extends Dexie {
     });
   }
 }
+
 const db = new BDDatabase();
 
-// ---------------------------------- Helpers
 function inferMetadataFromFilename(name = "") {
   const base = name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
   const by = base.split(/\s+by\s+/i);
@@ -115,32 +65,23 @@ function parseHeading(md: string) {
   return (md.split("\n")[0] || "").replace(/^#+\s*/, "").slice(0, 120) || "Untitled";
 }
 
-function bytesToNice(n: number) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
-// Request persistent storage so IndexedDB isn't evicted easily
 async function ensurePersistence() {
   if ((navigator as any).storage && (navigator as any).storage.persist) {
     try { await (navigator as any).storage.persist(); } catch {}
   }
 }
 
-// ---------------------------------- EPUB extraction (client)
 async function extractTextFromEPUB(file: File): Promise<string> {
   const buf = await file.arrayBuffer();
   const zip = await JSZip.loadAsync(buf);
 
-  // 1) Find rootfile from META-INF/container.xml
   const containerXml = await zip.file("META-INF/container.xml")?.async("string");
   if (!containerXml) throw new Error("EPUB: container.xml not found");
   const cdoc = new DOMParser().parseFromString(containerXml, "application/xml");
   const rootfile = cdoc.querySelector("rootfile")?.getAttribute("full-path");
   if (!rootfile) throw new Error("EPUB: rootfile not found");
 
-  // 2) Parse OPF (package document)
   const opfText = await zip.file(rootfile)?.async("string");
   if (!opfText) throw new Error("EPUB: OPF not found");
   const opf = new DOMParser().parseFromString(opfText, "application/xml");
@@ -171,7 +112,6 @@ async function extractTextFromEPUB(file: File): Promise<string> {
   return out.trim();
 }
 
-// ---------------------------------- PDF extraction (client)
 async function extractTextFromPDF(file: File): Promise<string> {
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
@@ -185,7 +125,6 @@ async function extractTextFromPDF(file: File): Promise<string> {
   return text.trim();
 }
 
-// ---------------------------------- Providers (client fetch)
 async function callOpenAI({ apiKey, model, system, user }: { apiKey: string; model: string; system: string; user: string; }) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -221,17 +160,15 @@ async function callGemini({ apiKey, model, system, user }: { apiKey: string; mod
   return parts.map((p: any) => p.text).join("\n");
 }
 
-// ---------------------------------- UI
-export default function App() {
+export default function BookDistiller() {
   const [bookId, setBookId] = useState<string>("");
-  const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [bookText, setBookText] = useState("");
 
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
 
-  const [provider, setProvider] = useState("openai"); // 'openai' | 'anthropic' | 'google'
+  const [provider, setProvider] = useState("openai");
   const [model, setModel] = useState("gpt-4o-mini");
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem("bd_apiKey") || "");
   useEffect(() => { localStorage.setItem("bd_apiKey", apiKey || ""); }, [apiKey]);
@@ -250,7 +187,6 @@ export default function App() {
 
   useEffect(() => { ensurePersistence(); }, []);
 
-  // Load last project on mount
   useEffect(() => {
     (async () => {
       const last = await db.settings.get("last_book_id");
@@ -267,17 +203,14 @@ export default function App() {
 
   async function onUpload(f: File | null) {
     if (!f) return;
-    setFile(f);
     const id = crypto.randomUUID();
     const meta = inferMetadataFromFilename(f.name);
 
-    // Persist blob
     await db.books.put({ id, name: f.name, blob: f, createdAt: Date.now(), title: meta.title, author: meta.author });
     await db.settings.put({ key: "last_book_id", value: id });
     setBookId(id);
     setTitle(meta.title); setAuthor(meta.author);
 
-    // Extract
     try {
       let text = "";
       const ext = (f.name.split(".").pop() || "").toLowerCase();
@@ -354,17 +287,15 @@ export default function App() {
   function discard(id: string) { updateSectionLocal({ id, status: "discarded" }); }
   function edit(id: string, content: string) { updateSectionLocal({ id, content }); }
 
-  // Auto-advance loop — waits for Accept action
   useEffect(() => {
     (async () => {
       if (!autoAdvance) return;
       const count = accepted.length;
       if (count >= maxSections) return;
       const last = sections[sections.length - 1];
-      if (!last || last.status !== "accepted") return; // wait for explicit accept
+      if (!last || last.status !== "accepted") return;
       await generateNext();
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sections, autoAdvance]);
 
   function download(ext: "md" | "txt") {
@@ -385,7 +316,6 @@ export default function App() {
       </div>
 
       <div className="grid grid-cols-12 gap-4">
-        {/* LEFT */}
         <div className="col-span-12 lg:col-span-3 space-y-4">
           <Card>
             <CardHeader><CardTitle className="text-base">Source</CardTitle></CardHeader>
@@ -442,7 +372,6 @@ export default function App() {
           </Card>
         </div>
 
-        {/* CENTER */}
         <div className="col-span-12 lg:col-span-5">
           <Card className="h-[72vh] flex flex-col">
             <CardHeader><CardTitle className="text-base">Transcript</CardTitle></CardHeader>
@@ -471,7 +400,6 @@ export default function App() {
           </Card>
         </div>
 
-        {/* RIGHT */}
         <div className="col-span-12 lg:col-span-4 space-y-4">
           <Card className="h-[48vh] flex flex-col">
             <CardHeader><CardTitle className="text-base">Outline</CardTitle></CardHeader>
