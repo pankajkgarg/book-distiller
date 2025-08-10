@@ -251,7 +251,9 @@ export default function BookDistiller() {
   const [author, setAuthor] = useState('');
   const [bookText, setBookText] = useState('');
 
-  const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
+  const [prompt, setPrompt] = useState(
+    () => localStorage.getItem('bd_prompt') || DEFAULT_PROMPT,
+  );
 
   const [provider, setProvider] = useState(
     () => localStorage.getItem('bd_provider') || 'openai',
@@ -299,6 +301,9 @@ export default function BookDistiller() {
   useEffect(() => {
     localStorage.setItem('bd_model', model);
   }, [model]);
+  useEffect(() => {
+    localStorage.setItem('bd_prompt', prompt);
+  }, [prompt]);
 
   const [autoAdvance, setAutoAdvance] = useState(false);
   const [maxSections, setMaxSections] = useState(12);
