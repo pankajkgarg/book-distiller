@@ -1,29 +1,37 @@
+# Book Distiller
 
+Book Distiller is a web application that generates in-depth, multi-section
+analyses of books using large language models. Upload a PDF or EPUB and the app
+walks you through a section-by-section distillation that you can edit, accept,
+or discard.
 
-This is a project bootstrapped with [`@vitejs/app`](https://vitejs.dev/guide/#scaffolding-your-first-vite-project) (`react-ts`), added with [TailwindCSS](https://tailwindcss.com) and [TypeScript](https://www.typescriptlang.org) setup.
+## Core Features
 
-- ⚡ blazing fast dev server and build
-- 🔗 route management added (`TanStack Router` - File Based routing)
-
-
+- **Multi-provider LLM support** – switch between OpenAI, Anthropic, and Google
+  models.
+- **Section workflow** – press **Start** to create the first section, then
+  **Next** to request another. Each section can be edited inline, accepted, or
+  discarded.
+- **Auto‑advance mode** – when enabled, accepting a section automatically
+  triggers generation of the next one until a stop token appears or the
+  configured section limit is reached.
+- **Undo & stop controls** – undo the last accepted section or stop generation
+  mid‑process.
+- **Export options** – download the stitched sections as Markdown or plain text.
 
 ## Getting Started
 
-
-```
-pnpm i
-```
-
-Then, run the development server:
-
 ```bash
+pnpm i
 pnpm dev
 ```
 
+The development server runs at `http://localhost:3000`.
+
 ## Deployment
 
-- build command: `pnpm build`
-- output directory: `dist`
+- Build command: `pnpm build`
+- Output directory: `dist`
 
 ### Vercel
 
@@ -35,7 +43,7 @@ pnpm dev
 
 ## References
 
-- [vite](https://vitejs.dev)
-  - [avoid manual import](https://vitejs.dev/guide/features.html#jsx)
+- [Vite](https://vitejs.dev)
 - [TailwindCSS](https://tailwindcss.com/)
 - [TypeScript](https://www.typescriptlang.org)
+
